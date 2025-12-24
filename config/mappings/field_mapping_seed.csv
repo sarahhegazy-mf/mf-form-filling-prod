@@ -1,0 +1,23 @@
+pattern,canonical_key
+full name,applicant.full_name
+applicant name,applicant.full_name
+name of applicant,applicant.full_name
+nationality,applicant.nationality
+date of birth,applicant.date_of_birth
+dob,applicant.date_of_birth
+emirates id,applicant.emirates_id
+eid,applicant.emirates_id
+mobile,applicant.mobile
+phone,applicant.mobile
+email,applicant.email
+employer,employment.employer_name
+company,employment.employer_name
+monthly salary,employment.monthly_salary_aed
+salary,employment.monthly_salary_aed
+job title,employment.job_title
+loan amount,loan.requested_amount_aed
+requested amount,loan.requested_amount_aed
+purchase price,property.purchase_price_aed
+property price,property.purchase_price_aed
+property address,property.address
+address,property.address
