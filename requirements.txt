@@ -1,0 +1,5 @@
+streamlit>=1.32
+pandas>=2.0
+pypdf>=4.0
+google-genai>=0.6.0
+protobuf<5
