@@ -57,16 +57,18 @@ with st.sidebar:
     selected_banks = st.multiselect("Select bank(s)", banks, default=banks[:1] if banks else [])
 
     # ✅ No confidence bar UI. Keep a simple threshold control for validation logic.
-    confidence_threshold = st.number_input("Confidence threshold", min_value=0.0, max_value=1.0, value=0.6, step=0.05)
+    # confidence_threshold = st.number_input("Confidence threshold", min_value=0.0, max_value=1.0, value=0.6, step=0.05)
 
     st.divider()
     st.subheader("Upload client documents")
-    uploads = st.file_uploader(
-        "Upload client PDFs (EID, salary cert, bank statements, etc.)",
-        type=["pdf"],
-        accept_multiple_files=True,
-    )
 
+    uploaded_files = st.file_uploader("Upload PDFs", type=["pdf"], accept_multiple_files=True)
+    
+    if uploaded_files:
+        pdf_bytes = []
+        for f in uploaded_files:
+            pdf_bytes.append((f.name, f.read()))
+        st.session_state.pdf_bytes = pdf_bytes
 st.divider()
 
 colA, colB = st.columns([1, 1], gap="large")
