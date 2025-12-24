@@ -9,6 +9,8 @@ BANK_FORMS_DIR = Path("assets/bank_forms")
 OUT_DIR = Path("backend/registry_store")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
+MAPPING_SEED = Path("config/mappings/field_mapping_seed.csv")
+
 
 def _pdf_to_text(path: Path) -> str:
     reader = PdfReader(str(path))
@@ -18,68 +20,82 @@ def _pdf_to_text(path: Path) -> str:
     return "\n".join(parts)
 
 
-def _guess_fields(text: str) -> list[str]:
-    """Heuristically propose form fields from a bank form PDF.
-
-    This is a bootstrapper. In production, review the CSV and clean field names.
-    """
-    fields = set()
-
+def _guess_labels(text: str) -> list[str]:
+    labels = set()
     for raw in text.splitlines():
         line = " ".join(raw.strip().split())
         if not line:
             continue
 
-        # Label: ______
-        if ":" in line and len(line) <= 120:
+        if ":" in line and len(line) <= 140:
             label = line.split(":", 1)[0].strip()
-            if 3 <= len(label) <= 70:
-                fields.add(label)
+            if 3 <= len(label) <= 80:
+                labels.add(label)
 
-        # Underscore runs like "Employer Name _______"
         if re.search(r"_{4,}", raw):
             left = re.split(r"_{4,}", raw)[0].strip()
             left = " ".join(left.split())
-            if 3 <= len(left) <= 80:
-                fields.add(left)
+            if 3 <= len(left) <= 90:
+                labels.add(left)
 
-        # Checkbox style prompts
-        if re.search(r"\[\s*\]|\(\s*\)", raw):
-            cleaned = re.sub(r"\[\s*\]|\(\s*\)", "", line).strip()
-            if 3 <= len(cleaned) <= 80:
-                fields.add(cleaned)
-
-    # Remove obvious junk
     blacklist = [
-        "signature", "for bank use", "office use", "page", "date:", "stamp", "branch",
-        "terms and conditions", "declaration"
+        "signature", "for bank use", "office use", "page", "stamp", "branch",
+        "terms and conditions", "declaration", "please tick", "notes"
     ]
     out = []
-    for f in fields:
-        fl = f.lower()
-        if any(b in fl for b in blacklist):
+    for l in labels:
+        if any(b in l.lower() for b in blacklist):
             continue
-        out.append(f)
-
+        out.append(l)
     return sorted(out)
+
+
+def _load_mapping_seed() -> list[tuple[str, str]]:
+    if not MAPPING_SEED.exists():
+        return []
+    df = pd.read_csv(MAPPING_SEED)
+    pairs = []
+    for _, r in df.iterrows():
+        pat = str(r.get("pattern", "")).strip().lower()
+        key = str(r.get("canonical_key", "")).strip()
+        if pat and key:
+            pairs.append((pat, key))
+    return pairs
+
+
+def _map_label(label: str, mapping: list[tuple[str, str]]) -> str:
+    ll = label.lower()
+    for pat, key in mapping:
+        if pat in ll:
+            return key
+    return ""
 
 
 def main() -> None:
     if not BANK_FORMS_DIR.exists():
         raise FileNotFoundError(f"{BANK_FORMS_DIR} not found. Put PDFs in assets/bank_forms/")
 
+    mapping = _load_mapping_seed()
     rows = []
     for pdf in sorted(BANK_FORMS_DIR.glob("*.pdf")):
         bank = pdf.stem.replace("_Mortgage_App", "").replace("_", " ").strip()
         text = _pdf_to_text(pdf)
-        for field in _guess_fields(text):
-            rows.append({"bank": bank, "field": field, "required": True})
+        for label in _guess_labels(text):
+            rows.append(
+                {
+                    "bank": bank,
+                    "bank_label": label,
+                    "canonical_key": _map_label(label, mapping),
+                    "required": True,
+                    "section": "",
+                }
+            )
 
     df = pd.DataFrame(rows).drop_duplicates()
     out_csv = OUT_DIR / "bank_registry.csv"
     df.to_csv(out_csv, index=False)
     print(f"Saved registry -> {out_csv} ({len(df)} rows)")
-    print(df.groupby("bank")["field"].count().sort_values(ascending=False))
+    print("Tip: fill 'canonical_key' for unmapped labels, and set required=False for optional fields.")
 
 
 if __name__ == "__main__":
