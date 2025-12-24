@@ -12,17 +12,30 @@ def load_bank_registry() -> pd.DataFrame:
             f"{REGISTRY_PATH} not found. Run: python backend/build_bank_registry.py"
         )
     df = pd.read_csv(REGISTRY_PATH)
-    # Normalize required column to bool
+
     if "required" in df.columns:
         df["required"] = df["required"].astype(str).str.lower().isin(["true", "1", "yes", "y"])
+
+    for col in ["bank", "bank_label"]:
+        if col not in df.columns:
+            raise ValueError("bank_registry.csv must include at least: bank, bank_label")
+    if "canonical_key" not in df.columns:
+        df["canonical_key"] = ""
+    if "section" not in df.columns:
+        df["section"] = ""
+
     return df
 
 
 def required_fields_for_bank(bank: str) -> list[str]:
     df = load_bank_registry()
-    if "bank" not in df.columns or "field" not in df.columns:
-        raise ValueError("bank_registry.csv must include columns: bank, field, required")
     sub = df[df["bank"] == bank]
     if "required" in sub.columns:
         sub = sub[sub["required"] == True]
-    return sub["field"].dropna().astype(str).tolist()
+
+    keys = []
+    for _, r in sub.iterrows():
+        ck = str(r.get("canonical_key", "")).strip()
+        lbl = str(r.get("bank_label", "")).strip()
+        keys.append(ck if ck else lbl)
+    return [k for k in keys if k]
