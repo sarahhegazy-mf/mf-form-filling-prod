@@ -56,7 +56,7 @@ def _call_model(
 
     prompt = f"""You are a mortgage operations assistant.
 
-Extract ONLY the requested fields for bank: "{bank_name}" from the DOCUMENTS.
+Extract ONLY the requested fields for bank: "{bank_name}" from the DOCUMENTS.\n\nThe provided field names are the exact JSON keys you must return. They may be canonical keys (e.g., "applicant.full_name") or bank labels.
 
 Return ONLY valid JSON (no markdown, no explanations).
 The JSON must be a single object where keys EXACTLY match the provided field names.
