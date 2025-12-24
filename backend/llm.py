@@ -78,83 +78,48 @@ DOCUMENTS (extracted text may be incomplete for scanned PDFs; use the attached P
 {pdf_text}
 """.strip()
 
-
 def extract_fields_with_genai(
     pdf_text: str,
     field_list: List[str],
     bank_name: str,
-    uploaded_pdfs: Optional[List[Tuple[str, bytes]]] = None,
+    uploaded_pdfs: List[Tuple[str, bytes]],
     max_output_tokens: int = 2048,
-) -> Dict[str, Any]:
-    """
-    Multimodal extraction:
-    - Sends prompt text + attached PDF bytes (application/pdf) to Gemini.
-    - Returns dict[field] = {value, confidence, evidence}
-    """
-    api_key = os.getenv("GEMINI_API_KEY", "")  # Streamlit secrets should export this env var in your app
+):
+    api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        raise RuntimeError("Missing GEMINI_API_KEY. Set it in .streamlit/secrets.toml (and load into env).")
-
-    model_name = os.getenv("GEMINI_MODEL", "models/gemini-2.5-flash")
+        raise RuntimeError("Missing GEMINI_API_KEY")
 
     client = genai.Client(api_key=api_key)
 
-    prompt = _build_prompt(bank_name=bank_name, field_list=field_list, pdf_text=pdf_text)
+    model = os.getenv("GEMINI_MODEL", "models/gemini-2.5-pro")
 
-    parts: List[types.Part] = [types.Part.from_text(prompt)]
+    prompt = _build_prompt(bank_name, field_list, pdf_text)
 
-    # Attach PDFs (this is the key improvement for scanned docs)
-    if uploaded_pdfs:
-        for (name, b) in uploaded_pdfs:
-            if b:
-                parts.append(types.Part.from_bytes(data=b, mime_type="application/pdf"))
+    # Build message parts EXACTLY as Google expects
+    parts = [types.Part.from_text(prompt)]
+
+    # Attach each PDF
+    for name, data in uploaded_pdfs:
+        parts.append(
+            types.Part.from_bytes(
+                data=data,
+                mime_type="application/pdf"
+            )
+        )
 
     resp = client.models.generate_content(
-        model=model_name,
+        model=model,
         contents=[types.Content(role="user", parts=parts)],
         config=types.GenerateContentConfig(
             temperature=0,
-            max_output_tokens=max_output_tokens,
             response_mime_type="application/json",
-        ),
+            max_output_tokens=max_output_tokens,
+        )
     )
 
-    text = (resp.text or "").strip()
-    if not text:
-        raise RuntimeError("Gemini returned empty response.")
+    output = resp.text
 
     try:
-        data = _safe_json_load(text)
-        if not isinstance(data, dict):
-            raise ValueError("JSON root is not an object.")
-        return data
-    except Exception as e:
-        # One retry with a JSON-repair instruction
-        repair_prompt = f"""
-You returned invalid JSON.
-
-Fix the output into STRICT VALID JSON ONLY.
-Do not add any commentary.
-
-Here is the invalid output:
-{text}
-""".strip()
-
-        repair_parts = [types.Part.from_text(repair_prompt)]
-        repair_resp = client.models.generate_content(
-            model=model_name,
-            contents=[types.Content(role="user", parts=repair_parts)],
-            config=types.GenerateContentConfig(
-                temperature=0,
-                max_output_tokens=max_output_tokens,
-                response_mime_type="application/json",
-            ),
-        )
-        repaired = (repair_resp.text or "").strip()
-        try:
-            data = _safe_json_load(repaired)
-            if not isinstance(data, dict):
-                raise ValueError("JSON root is not an object.")
-            return data
-        except Exception:
-            raise RuntimeError(f"Gemini returned invalid JSON. Error: {e}. Raw output:\n{(text[:2000])}")
+        return _safe_json_load(output)
+    except Exception:
+        raise RuntimeError(f"Invalid JSON from Gemini:\n{output[:2000]}")
