@@ -92,11 +92,12 @@ with colB:
 
         for bank in selected_banks:
             st.write(f"### {bank}")
-            bank_partial = {}
+
+            bank_partial = {"data": {}}
 
             def on_partial_update(bank_name, partial):
-                nonlocal bank_partial
-                bank_partial.update(partial)
+                bank_partial["data"].update(partial)
+            
                 df = pd.DataFrame(
                     [
                         {
@@ -105,11 +106,11 @@ with colB:
                             "confidence": v.get("confidence"),
                             "evidence": v.get("evidence"),
                         }
-                        for k, v in bank_partial.items()
+                        for k, v in bank_partial["data"].items()
                     ]
                 )
                 live.dataframe(df, use_container_width=True, hide_index=True)
-
+                
             payload = process_bank(
                 bank_name=bank,
                 pdf_text=st.session_state.pdf_text,
